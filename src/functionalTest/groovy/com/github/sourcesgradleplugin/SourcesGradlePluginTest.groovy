@@ -132,4 +132,40 @@ grabSources {
         result.output.contains("stax-api")
     }
 
+    def "can be configured to ignore certain dependencies"() {
+        given:
+        buildFile << """
+plugins {
+    id 'groovy'
+    id 'com.github.sources-gradle-plugin'
+}
+repositories {
+    mavenCentral()
+}
+dependencies {
+    implementation 'org.codehaus.groovy:groovy-all:2.5.8'
+    implementation 'stax:stax-api:1.0'
+}
+grabSources {
+    stopOnFailure = true
+    exclude = [
+        ~/.*:groovy-console:2.5.8/,
+        ~/stax:.*/,
+    ]
+}
+"""
+        when:
+        BuildResult result = GradleRunner.create()
+                .withProjectDir(testProjectDir)
+                .withPluginClasspath()
+                .withArguments("-s", "grabSources")
+                .forwardOutput()
+                .build()
+
+        then:
+        result.task(":grabSources").outcome == TaskOutcome.SUCCESS
+        outputDirectory.toPath().resolve('groovy-all-2.5.8-sources.jar').toFile().exists()
+        !outputDirectory.toPath().resolve('groovy-console-2.5.8-sources.jar').toFile().exists()
+    }
+
 }

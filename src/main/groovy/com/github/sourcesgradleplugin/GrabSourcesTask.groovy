@@ -14,6 +14,9 @@ import org.gradle.api.tasks.TaskAction
 import org.gradle.jvm.JvmLibrary
 import org.gradle.language.base.artifact.SourcesArtifact
 
+import java.util.regex.Matcher
+import java.util.regex.Pattern
+
 /**
  * Task that resolves sources of all dependencies and puts them into specified directory.
  */
@@ -51,6 +54,12 @@ class GrabSourcesTask extends DefaultTask {
     Boolean stopOnFailure = Boolean.FALSE
 
     /**
+     * Patterns for artifacts that should be excluded.
+     */
+    @Input
+    List<Pattern> exclude = []
+
+    /**
      * Grabs sources of dependencies and puts them to output directory.
      */
     @TaskAction
@@ -59,8 +68,7 @@ class GrabSourcesTask extends DefaultTask {
     // collectMany leads to mismatching generic types.
     @SuppressWarnings('UseCollectMany')
     void grabSources() {
-        Set<? extends DependencyResult> dependencies = project.configurations.getByName(configurationName)
-                .incoming.resolutionResult.allDependencies.toSet()
+        Set<? extends DependencyResult> dependencies = dependenciesToResolve
         List<UnresolvedDependencyResult> unresolvedDependencies = dependencies
                 .findAll { it instanceof UnresolvedDependencyResult }*.asType(UnresolvedDependencyResult)
         if (unresolvedDependencies) {
@@ -81,9 +89,12 @@ class GrabSourcesTask extends DefaultTask {
         List<ComponentArtifactsResult> resolvedSources =
                 sourceResolutionResult.findAll { it instanceof ComponentArtifactsResult }
                         *.asType(ComponentArtifactsResult)
-        Set<ArtifactResult> sourceArtifacts = resolvedSources.collect {
-            Set<ArtifactResult> artifacts = it.getArtifacts(artifactType)
-            onResolutionFailure("There are no artifacts for ${it.id}")
+        Set<ArtifactResult> sourceArtifacts = resolvedSources.collect { componentArtifactsResult ->
+            Set<ArtifactResult> artifacts = componentArtifactsResult.getArtifacts(artifactType)
+            if (!artifacts) {
+                onResolutionFailure("There are no artifacts of type $artifactType" +
+                        " for ${componentArtifactsResult.id}")
+            }
             artifacts
         }.flatten()*.asType(ArtifactResult).toSet()
         List<UnresolvedArtifactResult> unresolvedArtifacts = sourceArtifacts
@@ -106,6 +117,21 @@ class GrabSourcesTask extends DefaultTask {
             throw new GradleException(explanation)
         } else {
             logger.warn(explanation)
+        }
+    }
+
+    private Set<? extends DependencyResult> getDependenciesToResolve() {
+        Set<? extends DependencyResult> dependencies = project.configurations.getByName(configurationName)
+                .incoming.resolutionResult.allDependencies.toSet()
+        dependencies.findAll { dependency ->
+            Pattern matched = exclude.findResult { pattern ->
+                Matcher matcher = pattern.matcher(dependency.requested.displayName)
+                matcher.matches() ? pattern : null
+            }
+            if (matched != null) {
+                logger.info("Excluding ${dependency.requested.displayName} because it matches ${matched.pattern()}")
+            }
+            matched == null
         }
     }
 
