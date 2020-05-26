@@ -9,6 +9,7 @@ import org.gradle.api.component.Artifact
 import org.gradle.api.component.Component
 import org.gradle.api.file.CopySpec
 import org.gradle.api.tasks.Input
+import org.gradle.api.tasks.InputFiles
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.TaskAction
 import org.gradle.jvm.JvmLibrary
@@ -60,6 +61,31 @@ class GrabSourcesTask extends DefaultTask {
     List<Pattern> exclude = []
 
     /**
+     * Explicit artifacts to be used instead of downloading them.
+     *
+     * This is useful when repository does not contain source artifacts for some dependency.
+     *
+     * The key is {@link org.gradle.api.artifacts.component.ComponentSelector#getDisplayName()}
+     * that is usually group:artifactId:version and the value is the file to be used.
+     */
+    @Input
+    Map<String, File> explicit = [:]
+
+    /**
+     * Gets explicit files to be used instead of downloading them.
+     *
+     * This is for Gradle to determine if task is up to date.
+     *
+     * @return Explicit files.
+     *
+     * @see #explicit
+     */
+    @InputFiles
+    Collection<File> getExplicitFiles() {
+        explicit.values()
+    }
+
+    /**
      * Grabs sources of dependencies and puts them to output directory.
      */
     @TaskAction
@@ -68,7 +94,7 @@ class GrabSourcesTask extends DefaultTask {
     // collectMany leads to mismatching generic types.
     @SuppressWarnings('UseCollectMany')
     void grabSources() {
-        Set<? extends DependencyResult> dependencies = dependenciesToResolve
+        Set<? extends DependencyResult> dependencies = findDependenciesToResolve()
         List<UnresolvedDependencyResult> unresolvedDependencies = dependencies
                 .findAll { it instanceof UnresolvedDependencyResult }*.asType(UnresolvedDependencyResult)
         if (unresolvedDependencies) {
@@ -105,6 +131,7 @@ class GrabSourcesTask extends DefaultTask {
         List<ResolvedArtifactResult> resolvedArtifacts = sourceArtifacts
                 .findAll { it instanceof ResolvedArtifactResult }*.asType(ResolvedArtifactResult)
         Set<File> resolvedFiles = resolvedArtifacts*.file.toSet()
+        resolvedFiles.addAll(explicitFiles)
         logger.info("Resolved sources: ${resolvedFiles}")
         project.copy { CopySpec spec ->
             spec.from(resolvedFiles)
@@ -120,10 +147,10 @@ class GrabSourcesTask extends DefaultTask {
         }
     }
 
-    private Set<? extends DependencyResult> getDependenciesToResolve() {
+    private Set<? extends DependencyResult> findDependenciesToResolve() {
         Set<? extends DependencyResult> dependencies = project.configurations.getByName(configurationName)
                 .incoming.resolutionResult.allDependencies.toSet()
-        dependencies.findAll { dependency ->
+        Set<? extends DependencyResult> notExcluded = dependencies.findAll { dependency ->
             Pattern matched = exclude.findResult { pattern ->
                 Matcher matcher = pattern.matcher(dependency.requested.displayName)
                 matcher.matches() ? pattern : null
@@ -133,6 +160,15 @@ class GrabSourcesTask extends DefaultTask {
             }
             matched == null
         }
+        Set<? extends DependencyResult> notExplicit = notExcluded.findAll { dependency ->
+            File explicitFile = explicit[dependency.requested.displayName]
+            if (explicitFile) {
+                logger.info("Excluding ${dependency.requested.displayName}" +
+                        " because there is explicitly configured file for it ${explicitFile}")
+            }
+            !explicitFile
+        }
+        notExplicit
     }
 
 }

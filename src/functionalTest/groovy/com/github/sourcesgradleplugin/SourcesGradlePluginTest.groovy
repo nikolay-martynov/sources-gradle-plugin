@@ -168,4 +168,45 @@ grabSources {
         !outputDirectory.toPath().resolve('groovy-console-2.5.8-sources.jar').toFile().exists()
     }
 
+    def "can be configured to use explicit files for certain dependencies"() {
+        given:
+        File groovyConsoleSrc = new File(testProjectDir, "groovy-console-source.jar")
+        groovyConsoleSrc.text = "java source"
+        File staxApiSrc = new File(testProjectDir, "staxApi-source.jar")
+        staxApiSrc.text = "java source"
+        buildFile << """
+plugins {
+    id 'groovy'
+    id 'com.github.sources-gradle-plugin'
+}
+repositories {
+    mavenCentral()
+}
+dependencies {
+    implementation 'org.codehaus.groovy:groovy-all:2.5.8'
+    implementation 'stax:stax-api:1.0'
+}
+grabSources {
+    stopOnFailure = true
+    explicit = [
+        'org.codehaus.groovy:groovy-console:2.5.8' : new File('$groovyConsoleSrc'),
+        'stax:stax-api:1.0': new File('$staxApiSrc'),
+    ]
+}
+"""
+        when:
+        BuildResult result = GradleRunner.create()
+                .withProjectDir(testProjectDir)
+                .withPluginClasspath()
+                .withArguments("-s", "grabSources")
+                .forwardOutput()
+                .build()
+
+        then:
+        result.task(":grabSources").outcome == TaskOutcome.SUCCESS
+        outputDirectory.toPath().resolve('groovy-console-source.jar').toFile().exists()
+        !outputDirectory.toPath().resolve('groovy-console-2.5.8-sources.jar').toFile().exists()
+        outputDirectory.toPath().resolve('staxApi-source.jar').toFile().exists()
+    }
+
 }
