@@ -95,11 +95,10 @@ artifacts {
 
 publishing {
     publications {
-        mavenJava(MavenPublication) {
-            from components.java
-//            artifact sourcesJar
-//            artifact groovydocJar
-//            artifact javadocJar
+        pluginMaven(MavenPublication) {
+            artifact sourcesJar
+            artifact groovydocJar
+            artifact javadocJar
 
             pom.withXml {
                 def root = asNode()
