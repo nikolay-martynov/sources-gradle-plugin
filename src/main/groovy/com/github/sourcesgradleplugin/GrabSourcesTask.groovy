@@ -118,7 +118,7 @@ class GrabSourcesTask extends DefaultTask {
         Set<ArtifactResult> sourceArtifacts = resolvedSources.collect { componentArtifactsResult ->
             Set<ArtifactResult> artifacts = componentArtifactsResult.getArtifacts(artifactType)
             if (!artifacts) {
-                onResolutionFailure("There are no artifacts of type $artifactType" +
+                onResolutionFailure("There are no artifacts of type ${artifactType.simpleName}" +
                         " for ${componentArtifactsResult.id}")
             }
             artifacts
