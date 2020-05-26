@@ -1,0 +1,94 @@
+= Sources Gradle plugin
+
+== Introduction
+
+The plugin allows downloading sources for direct and transitive dependencies
+into a specified directory.
+
+== Usage
+
+Plugin as well as its dependencies are available via
+link:https://jitpack.io[jitpack].
+
+```groovy
+buildscript {
+    repositories {
+        maven { url 'https://jitpack.io' }
+    }
+    dependencies {
+        classpath 'com.github.nikolay-martynov:sources-gradle-plugin:1.0'
+    }
+}
+
+apply plugin: com.github.sourcesgradleplugin.SourcesGradlePlugin
+```
+
+The plugin registers default task named `grabSources` that will download
+sources of all dependencies of `runtimeClasspath` into `${project.buildDir}/dependencies`
+and skip any missing or unavailable source. The task does not run by default.
+
+You can specify a configuration whose sources are to be copied the following way:
+
+```groovy
+grabSources {
+    configurationName = 'compileClasspath'
+}
+```
+
+You can be informed that some source is missing via the plugin failing the build
+thanks to the following configuration:
+
+```groovy
+grabSources {
+    stopOnFailure = true
+}
+```
+
+You can also specify to ignore some (like proprietary) dependencies the following way:
+
+```groovy
+grabSources {
+    exclude = [
+        ~/.*:groovy-console:2.5.8/,
+        ~/stax:.*/,
+    ]
+}
+```
+
+`exclude` property is a list of patterns for component selector display name
+that is usually `group:artifactId:version` for Maven artifacts. Any dependency
+that matches any of the specified patterns will be ignored.
+
+You can also explicitly specify sources for selected dependencies. This can be
+useful when repository does not contain source artifact for some dependency,
+but you have to provide it. You can place dependency source archive together
+with the project files then configure the plugin the following way:
+
+```groovy
+grabSources {
+    explicit = [
+        'org.codehaus.groovy:groovy-console:2.5.8' : file('sources/groovy-console-2.5.8-patched.jar'),
+        'stax:stax-api:1.0': file('sources/stax-api-src.zip'),
+    ]
+}
+```
+
+Output directory can be specified the following way:
+
+```groovy
+grabSources {
+    outputDirectory = file("build/sources")
+}
+```
+
+The plugin does not use extensions, so you can add any number
+of tasks with their own configuration:
+
+```groovy
+task anotherGrabSources(type: GrabSourcesTask) {
+    // Some other configuration
+}
+```
+
+See link:src/functionalTest/groovy/com/github/sourcesgradleplugin/SourcesGradlePluginTest.groovy[tests]
+for full usage examples.
